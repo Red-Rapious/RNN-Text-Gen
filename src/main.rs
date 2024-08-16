@@ -16,7 +16,7 @@ struct Gradient {
     dwhy: DMatrix<f64>,
     dbh: DMatrix<f64>,
     dby: DMatrix<f64>,
-} 
+}
 
 fn main() {
     /* File loading */
@@ -46,7 +46,7 @@ fn loss_function(
     prev_h: DMatrix<f64>,
     vocab_size: usize,
     model: Model,
-) -> (f64, Gradient, &DMatrix<f64>) {
+) -> (f64, Gradient, DMatrix<f64>) {
     let mut xs = Vec::with_capacity(inputs.len());
     let mut hs = Vec::with_capacity(inputs.len());
     let mut ys = Vec::with_capacity(inputs.len());
@@ -84,27 +84,27 @@ fn loss_function(
     for t in (0..inputs.len()).rev() {
         let mut dy = ps[t].clone();
         dy[targets[t]] = dy[targets[t]] - 1.0;
-        dwhy = dwhy + dy.clone() * hs[t + 1].transpose();
-        dby = dby + dy.clone();
+        dwhy += dy.clone() * hs[t + 1].transpose();
+        dby += dy.clone();
 
         let dh = model.why.transpose() * dy + dnext_h.clone();
         let dhraw = (DMatrix::from_element(hs[t + 1].nrows(), hs[t + 1].ncols(), 1.0)
             - hs[t + 1].clone() * hs[t + 1].clone())
             * dh; // tanh
 
-        dbh = dbh + dhraw.clone();
-        dwxh = dwxh + dhraw.clone() * xs[t].transpose();
-        dwhh = dwhh + dhraw.clone() * hs[t].transpose();
+        dbh += dhraw.clone();
+        dwxh += dhraw.clone() * xs[t].transpose();
+        dwhh += dhraw.clone() * hs[t].transpose();
         dnext_h = model.whh.transpose() * dhraw;
     }
 
     // Gradient cliping
-    // for dparam in [dwxh, dwhh, dwhy, dbh, dby].iter_mut() {
-    //     let norm = dparam.norm();
-    //     if norm > 5.0 {
-    //         *dparam = *dparam * 5.0 / norm
-    //     }
-    // }
+    for dparam in [&mut dwxh, &mut dwhh, &mut dwhy, &mut dbh, &mut dby] {
+        let norm = dparam.norm();
+        if norm > 5.0 {
+            *dparam *= 5.0 / norm
+        }
+    }
 
     let grad = Gradient {
         dwxh,
@@ -114,5 +114,5 @@ fn loss_function(
         dby,
     };
 
-    return (loss, grad, &hs[inputs.len()])
+    return (loss, grad, hs[inputs.len()].clone());
 }
