@@ -1,6 +1,9 @@
 use nalgebra::DMatrix;
 use std::collections::HashSet;
 use std::fs;
+use rand::prelude::SliceRandom;
+
+type ix = usize;
 
 struct Model {
     wxh: DMatrix<f64>,
@@ -115,4 +118,36 @@ fn loss_function(
     };
 
     return (loss, grad, hs[inputs.len()].clone());
+}
+
+fn sample(h: DMatrix<f64>, seed_letter: ix, n: usize, vocab_size: usize, model: Model) -> Vec<ix> {
+    // input vector
+    let mut x = DMatrix::zeros(vocab_size, 1);
+    x[seed_letter] = 1.0;
+    // generated letters
+    let mut generated_ixes: Vec<ix> = Vec::with_capacity(n);
+
+    let mut rng = rand::thread_rng();
+
+    for _ in 0..n {
+        // feedforward pass
+        let h = (model.wxh.clone() * x.clone() + model.whh.clone() * h.clone() + model.bh.clone())
+            .map(f64::tanh);
+
+        // output
+        let y = model.why.clone() * h + model.by.clone();
+        // apply softmax to obtain probabilities
+        let p = y.map(f64::exp) / y.map(f64::exp).sum();
+
+        // randomly sample the next character using the distribution p
+        let ixes = (0..vocab_size).collect::<Vec<_>>();
+        let ix = *ixes.choose_weighted(&mut rng, |i| p[*i]).unwrap();
+        generated_ixes.push(ix);
+        
+        // update the next input
+        x = DMatrix::zeros(vocab_size, 1);
+        x[ix] = 1.0;
+    }
+
+    return generated_ixes;
 }

@@ -11,3 +11,4 @@ repository = "https://github.com/Red-Rapious/RNN-Text-Gen"
 
 [dependencies]
 nalgebra = { version = "0.33.0", features = ["rand"] }
+rand = "0.8.5"
