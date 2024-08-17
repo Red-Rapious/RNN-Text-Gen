@@ -44,7 +44,7 @@ impl Model {
 
     fn update_memory(&mut self, gradient: &Model) {
         for i in 0..5 {
-            self.parameters[i] += gradient.parameters[i].clone().map(|x| x*x);
+            self.parameters[i] += gradient.parameters[i].map(|x| x*x);
         }
     }
 
@@ -52,7 +52,7 @@ impl Model {
         for i in 0..5 {
             self.parameters[i] -= learning_rate
                 * gradient.parameters[i].component_mul(
-                    &(memory.parameters[i].clone()
+                    &(&memory.parameters[i]
                         + DMatrix::from_element(
                             memory.parameters[i].nrows(),
                             memory.parameters[i].ncols(),
@@ -172,15 +172,15 @@ fn loss_function(
         xs[t][inputs[t]] = 1.0;
 
         hs.push(
-            (model.wxh().clone() * xs[t].clone()
-                + model.whh().clone() * hs[t].clone()
-                + model.bh().clone())
+            (model.wxh() * &xs[t]
+                + model.whh() * &hs[t]
+                + model.bh())
             .map(f64::tanh),
         ); // note that `hs` is shifted from one time step because `hs[0]` is the previous hidden state
-        ys.push(model.why().clone() * hs[t + 1].clone() + model.by().clone());
+        ys.push(model.why() * &hs[t + 1] + model.by());
         ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
 
-        loss = loss - ps[t][(targets[t], 0)].ln(); // cross-entropy loss
+        loss -= ps[t][(targets[t], 0)].ln(); // cross-entropy loss
     }
 
     /* Backward pass */
@@ -194,18 +194,17 @@ fn loss_function(
 
     for t in (0..inputs.len()).rev() {
         let mut dy = ps[t].clone();
-        dy[targets[t]] = dy[targets[t]] - 1.0;
-        dwhy += dy.clone() * hs[t + 1].transpose();
-        dby += dy.clone();
+        dy[targets[t]] -= 1.0;
+        dwhy += &dy * hs[t + 1].transpose();
+        dby += &dy;
 
-        let dh = model.why().transpose() * dy + dnext_h.clone();
+        let dh = model.why().transpose() * dy + &dnext_h;
 
-        let dhraw = (DMatrix::from_element(hs[t + 1].nrows(), hs[t + 1].ncols(), 1.0)
-            - hs[t + 1].clone().map(|x| x * x)).component_mul(&dh); // tanh
+        let dhraw = - hs[t + 1].map(|x| x * x).add_scalar(1.0).component_mul(&dh); // tanh
 
-        dbh += dhraw.clone();
-        dwxh += dhraw.clone() * xs[t].transpose();
-        dwhh += dhraw.clone() * hs[t].transpose();
+        dbh += &dhraw;
+        dwxh += &dhraw * xs[t].transpose();
+        dwhh += &dhraw * hs[t].transpose();
         dnext_h = model.whh().transpose() * dhraw;
     }
 
@@ -239,13 +238,13 @@ fn sample(
 
     for _ in 0..n {
         // feedforward pass
-        let h = (model.wxh().clone() * x.clone()
-            + model.whh().clone() * h.clone()
-            + model.bh().clone())
+        let h = (model.wxh() * x
+            + model.whh() * h
+            + model.bh())
         .map(f64::tanh);
 
         // output
-        let y = model.why().clone() * h + model.by().clone();
+        let y = model.why() * h + model.by();
         // apply softmax to obtain probabilities
         let p = y.map(f64::exp) / y.map(f64::exp).sum();
 
