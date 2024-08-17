@@ -44,7 +44,7 @@ impl Model {
 
     fn update_memory(&mut self, gradient: &Model) {
         for i in 0..5 {
-            self.parameters[i] += gradient.parameters[i].clone() * gradient.parameters[i].clone();
+            self.parameters[i] += gradient.parameters[i].clone().map(|x| x*x);
         }
     }
 
@@ -134,7 +134,9 @@ fn main() {
         }
 
         // Retrieve loss and gradient
-        let (loss, gradient, prev_h) = loss_function(inputs, targets, &prev_h, vocab_size, &model);
+        let (loss, gradient, new_prev_h) =
+            loss_function(inputs, targets, &prev_h, vocab_size, &model);
+        prev_h = new_prev_h;
         let smooth_loss = smooth_loss * 0.999 + loss * 0.001;
         if n % 100 == 0 {
             println!("iteration {}, loss: {}", n, smooth_loss);
@@ -176,7 +178,7 @@ fn loss_function(
             .map(f64::tanh),
         ); // note that `hs` is shifted from one time step because `hs[0]` is the previous hidden state
         ys.push(model.why().clone() * hs[t + 1].clone() + model.by().clone());
-        ps.push(ys[t].map(f64::exp).exp() / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
+        ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
 
         loss = loss - ps[t][(targets[t], 0)].ln(); // cross-entropy loss
     }
@@ -197,9 +199,9 @@ fn loss_function(
         dby += dy.clone();
 
         let dh = model.why().transpose() * dy + dnext_h.clone();
+
         let dhraw = (DMatrix::from_element(hs[t + 1].nrows(), hs[t + 1].ncols(), 1.0)
-            - hs[t + 1].clone() * hs[t + 1].clone())
-            * dh; // tanh
+            - hs[t + 1].clone().map(|x| x * x)).component_mul(&dh); // tanh
 
         dbh += dhraw.clone();
         dwxh += dhraw.clone() * xs[t].transpose();
