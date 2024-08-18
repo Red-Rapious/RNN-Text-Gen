@@ -172,7 +172,7 @@ fn loss_function(
         ys.push(model.why() * &hs[t + 1] + model.by());
         ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
 
-        loss -= ps[t][(targets[t], 0)].ln(); // cross-entropy loss
+        loss -= ps[t][targets[t]].ln(); // cross-entropy loss
     }
 
     /* Backward pass */
@@ -202,10 +202,7 @@ fn loss_function(
 
     // Gradient cliping
     for dparam in [&mut dwxh, &mut dwhh, &mut dwhy, &mut dbh, &mut dby] {
-        let norm = dparam.norm();
-        if norm > 5.0 {
-            *dparam *= 5.0 / norm
-        }
+        *dparam = dparam.map(|x| f64::clamp(x, -5.0, 5.0));
     }
 
     let grad = Model::new(dwxh, dwhh, dwhy, dbh, dby);
