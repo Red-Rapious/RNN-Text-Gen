@@ -1,5 +1,6 @@
 use nalgebra::DMatrix;
 use rand::prelude::SliceRandom;
+use rand_distr::Normal;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
@@ -52,15 +53,8 @@ impl Model {
     fn update_parameters(&mut self, learning_rate: f64, gradient: &Model, memory: &Model) {
         for i in 0..5 {
             self.parameters[i] -= learning_rate
-                * gradient.parameters[i].component_mul(
-                    &(&memory.parameters[i]
-                        + DMatrix::from_element(
-                            memory.parameters[i].nrows(),
-                            memory.parameters[i].ncols(),
-                            1e-8,
-                        ))
-                    .map(|x| 1.0 / f64::sqrt(x)),
-                );
+                * gradient.parameters[i]
+                    .component_mul(&memory.parameters[i].map(|x| 1.0 / f64::sqrt(x + 1e-8)));
         }
     }
 }
@@ -87,11 +81,13 @@ fn main() {
     let seq_length = 25; // truncation of backpropagation through time
     let learning_rate = 1e-1;
 
+    let mut rng = rand::thread_rng();
+    let normal = Normal::new(0.0, 1.0).unwrap();
     // Model parameters
     let mut model = Model::new(
-        0.01 * DMatrix::new_random(hidden_size, vocab_size),
-        0.01 * DMatrix::new_random(hidden_size, hidden_size),
-        0.01 * DMatrix::new_random(vocab_size, hidden_size),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(hidden_size), nalgebra::Dyn(vocab_size), &normal, &mut rng),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(hidden_size), nalgebra::Dyn(hidden_size), &normal, &mut rng),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(vocab_size), nalgebra::Dyn(hidden_size), &normal, &mut rng),
         DMatrix::zeros(hidden_size, 1),
         DMatrix::zeros(vocab_size, 1),
     );
@@ -196,7 +192,7 @@ fn loss_function(
 
         let dh = model.why().transpose() * dy + &dnext_h;
 
-        let dhraw = -hs[t + 1].map(|x| x * x).add_scalar(1.0).component_mul(&dh); // tanh
+        let dhraw = hs[t + 1].map(|x| 1.0 - x * x).component_mul(&dh); // tanh
 
         dbh += &dhraw;
         dwxh += &dhraw * xs[t].transpose();
@@ -242,7 +238,7 @@ fn sample(
         let p = y.map(f64::exp) / y.map(f64::exp).sum();
 
         // randomly sample the next character using the distribution p
-        let ixes = (0..vocab_size).collect::<Vec<_>>();
+        let ixes: Vec<ix> = (0..vocab_size).collect();
         let ix = *ixes.choose_weighted(&mut rng, |i| p[*i]).unwrap();
         generated_ixes.push(ix);
 
