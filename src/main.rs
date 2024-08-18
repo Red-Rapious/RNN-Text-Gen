@@ -3,6 +3,7 @@ use rand::prelude::SliceRandom;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
+#[allow(non_camel_case_types)]
 type ix = usize;
 
 struct Model {
@@ -44,7 +45,7 @@ impl Model {
 
     fn update_memory(&mut self, gradient: &Model) {
         for i in 0..5 {
-            self.parameters[i] += gradient.parameters[i].map(|x| x*x);
+            self.parameters[i] += gradient.parameters[i].map(|x| x * x);
         }
     }
 
@@ -68,7 +69,7 @@ fn main() {
     /* File loading */
     let file_path = "data/shakespeare-40k.txt";
     let data =
-        fs::read_to_string(file_path).expect(format!("Cannot find file {file_path}").as_str());
+        fs::read_to_string(file_path).unwrap_or_else(|_| panic!("Cannot find file {file_path}"));
     let chars: HashSet<char> = data.chars().collect();
     let ix_to_char: HashMap<ix, char> = chars.clone().into_iter().enumerate().collect();
     let char_to_ix: HashMap<char, ix> = chars
@@ -117,11 +118,11 @@ fn main() {
             p = 0;
         }
 
-        let inputs: Vec<ix> = data[p..p + seq_length]
+        let inputs: Vec<ix> = data[p..(p + seq_length)]
             .chars()
             .map(|c| char_to_ix[&c])
             .collect();
-        let targets: Vec<ix> = data[p + 1..p + seq_length + 1]
+        let targets: Vec<ix> = data[(p + 1)..(p + seq_length + 1)]
             .chars()
             .map(|c| char_to_ix[&c])
             .collect();
@@ -171,12 +172,7 @@ fn loss_function(
         xs.push(DMatrix::zeros(vocab_size, 1));
         xs[t][inputs[t]] = 1.0;
 
-        hs.push(
-            (model.wxh() * &xs[t]
-                + model.whh() * &hs[t]
-                + model.bh())
-            .map(f64::tanh),
-        ); // note that `hs` is shifted from one time step because `hs[0]` is the previous hidden state
+        hs.push((model.wxh() * &xs[t] + model.whh() * &hs[t] + model.bh()).map(f64::tanh)); // note that `hs` is shifted from one time step because `hs[0]` is the previous hidden state
         ys.push(model.why() * &hs[t + 1] + model.by());
         ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
 
@@ -200,7 +196,7 @@ fn loss_function(
 
         let dh = model.why().transpose() * dy + &dnext_h;
 
-        let dhraw = - hs[t + 1].map(|x| x * x).add_scalar(1.0).component_mul(&dh); // tanh
+        let dhraw = -hs[t + 1].map(|x| x * x).add_scalar(1.0).component_mul(&dh); // tanh
 
         dbh += &dhraw;
         dwxh += &dhraw * xs[t].transpose();
@@ -218,7 +214,7 @@ fn loss_function(
 
     let grad = Model::new(dwxh, dwhh, dwhy, dbh, dby);
 
-    return (loss, grad, hs[inputs.len()].clone());
+    (loss, grad, hs[inputs.len()].clone())
 }
 
 fn sample(
@@ -238,10 +234,7 @@ fn sample(
 
     for _ in 0..n {
         // feedforward pass
-        let h = (model.wxh() * x
-            + model.whh() * h
-            + model.bh())
-        .map(f64::tanh);
+        let h = (model.wxh() * x + model.whh() * h + model.bh()).map(f64::tanh);
 
         // output
         let y = model.why() * h + model.by();
@@ -258,5 +251,5 @@ fn sample(
         x[ix] = 1.0;
     }
 
-    return generated_ixes;
+    generated_ixes
 }
