@@ -4,6 +4,13 @@ use rand_distr::Normal;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
+pub const FILE_PATH: &'static str = "data/shakespeare-40k.txt";
+pub const HIDDEN_SIZE: usize = 100; // number of neurons in the hidden layer
+pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
+pub const LEARNING_RATE: f64 = 1e-1;
+pub const CLAMP: f64 = 5.0;
+pub const SAMPLE_SIZE: usize = 200;
+
 #[allow(non_camel_case_types)]
 type ix = usize;
 
@@ -61,9 +68,8 @@ impl Model {
 
 fn main() {
     /* File loading */
-    let file_path = "data/shakespeare-40k.txt";
     let data =
-        fs::read_to_string(file_path).unwrap_or_else(|_| panic!("Cannot find file {file_path}"));
+        fs::read_to_string(FILE_PATH).unwrap_or_else(|_| panic!("Cannot find file {FILE_PATH}"));
     let chars: HashSet<char> = data.chars().collect();
     let ix_to_char: HashMap<ix, char> = chars.clone().into_iter().enumerate().collect();
     let char_to_ix: HashMap<char, ix> = chars
@@ -76,19 +82,14 @@ fn main() {
 
     println!("Data has {} characters, {} unique", data.len(), chars.len());
 
-    // Hyperparameters
-    let hidden_size = 100; // number of neurons in the hidden layer
-    let seq_length = 25; // truncation of backpropagation through time
-    let learning_rate = 1e-1;
-
     let mut rng = rand::thread_rng();
     let normal = Normal::new(0.0, 1.0).unwrap();
     // Model parameters
     let mut model = Model::new(
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(hidden_size), nalgebra::Dyn(vocab_size), &normal, &mut rng),
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(hidden_size), nalgebra::Dyn(hidden_size), &normal, &mut rng),
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(vocab_size), nalgebra::Dyn(hidden_size), &normal, &mut rng),
-        DMatrix::zeros(hidden_size, 1),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(HIDDEN_SIZE), nalgebra::Dyn(vocab_size), &normal, &mut rng),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(HIDDEN_SIZE), nalgebra::Dyn(HIDDEN_SIZE), &normal, &mut rng),
+        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(vocab_size), nalgebra::Dyn(HIDDEN_SIZE), &normal, &mut rng),
+        DMatrix::zeros(HIDDEN_SIZE, 1),
         DMatrix::zeros(vocab_size, 1),
     );
 
@@ -103,29 +104,29 @@ fn main() {
 
     let mut n = 0;
     let mut p = 0;
-    let smooth_loss = (vocab_size as f64).ln() * seq_length as f64;
-    let mut prev_h = DMatrix::zeros(hidden_size, 1);
+    let smooth_loss = (vocab_size as f64).ln() * SEQ_LENGTH as f64;
+    let mut prev_h = DMatrix::zeros(HIDDEN_SIZE, 1);
 
     loop {
         // truncated backpropagation through time
-        if p + seq_length + 1 >= data.len() || n == 0 {
+        if p + SEQ_LENGTH + 1 >= data.len() || n == 0 {
             // reset the hidden state
-            prev_h = DMatrix::zeros(hidden_size, 1);
+            prev_h = DMatrix::zeros(HIDDEN_SIZE, 1);
             p = 0;
         }
 
-        let inputs: Vec<ix> = data[p..(p + seq_length)]
+        let inputs: Vec<ix> = data[p..(p + SEQ_LENGTH)]
             .chars()
             .map(|c| char_to_ix[&c])
             .collect();
-        let targets: Vec<ix> = data[(p + 1)..(p + seq_length + 1)]
+        let targets: Vec<ix> = data[(p + 1)..(p + SEQ_LENGTH + 1)]
             .chars()
             .map(|c| char_to_ix[&c])
             .collect();
 
         // sample from the model
         if n % 100 == 0 {
-            let sample = sample(&prev_h, inputs[0], 200, vocab_size, &model);
+            let sample = sample(&prev_h, inputs[0], SAMPLE_SIZE, vocab_size, &model);
             let txt: String = sample.iter().map(|i| ix_to_char[i]).collect();
             println!("----\n {} \n----", txt);
         }
@@ -141,9 +142,9 @@ fn main() {
 
         // Update parameters with AdaGrad
         memory.update_memory(&gradient);
-        model.update_parameters(learning_rate, &gradient, &memory);
+        model.update_parameters(LEARNING_RATE, &gradient, &memory);
 
-        p += seq_length;
+        p += SEQ_LENGTH;
         n += 1;
     }
 }
@@ -202,7 +203,7 @@ fn loss_function(
 
     // Gradient cliping
     for dparam in [&mut dwxh, &mut dwhh, &mut dwhy, &mut dbh, &mut dby] {
-        *dparam = dparam.map(|x| f64::clamp(x, -5.0, 5.0));
+        *dparam = dparam.map(|x| f64::clamp(x, -CLAMP, CLAMP));
     }
 
     let grad = Model::new(dwxh, dwhh, dwhy, dbh, dby);
