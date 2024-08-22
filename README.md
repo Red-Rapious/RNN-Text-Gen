@@ -2,7 +2,7 @@
 A small language model using a Recurrent Neural Network to generate text based on a corpus.
 
 ## Execution
-The implementation is done is Rust. To launch it, simply run:
+The implementation is done is Rust and based on [this blog post by Andrej Karpathy](http://karpathy.github.io/2015/05/21/rnn-effectiveness/). To launch it, simply run:
 ```bash
 cargo run --release
 ```
