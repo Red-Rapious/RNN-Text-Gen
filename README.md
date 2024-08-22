@@ -4,9 +4,11 @@ A small language model using a Recurrent Neural Network to generate text based o
 ## Execution
 The implementation is done is Rust and based on [this blog post by Andrej Karpathy](http://karpathy.github.io/2015/05/21/rnn-effectiveness/). To launch it, simply run:
 ```bash
-cargo run --release
+cargo run --release <filepath>
 ```
-Hyperparameters are defined in [`src/main.rs`](src/main.rs); you can for instance change the path of the file used for training, which defaults to `"data/shakespeare-40k.txt"`.
+The parameter passed in `<filepath>` is used as a training text for the network. A showcase file containing 40k lines of Shakespeare's plays is provided in `"data/shakespeare-40k.txt"`.
+
+Hyperparameters are defined in [`src/rnn.rs`](src/rnn.rs); you can for instance change the number of neurons in the hidden layer.
 
 ## Theory
 This simple RNN used the following recurring equations:

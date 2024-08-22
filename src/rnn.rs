@@ -4,7 +4,6 @@ use rand_distr::Normal;
 use std::collections::{HashMap, HashSet};
 use std::fs;
 
-pub const FILE_PATH: &'static str = "data/shakespeare-40k.txt";
 pub const HIDDEN_SIZE: usize = 100; // number of neurons in the hidden layer
 pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
 pub const LEARNING_RATE: f64 = 1e-1;
@@ -67,10 +66,10 @@ impl Model {
     }
 }
 
-pub fn start() {
+pub fn start(path: &String) {
     /* File loading */
     let data =
-        fs::read_to_string(FILE_PATH).unwrap_or_else(|_| panic!("Cannot find file {FILE_PATH}"));
+        fs::read_to_string(path).unwrap_or_else(|_| panic!("Cannot find file {path}"));
     let chars: HashSet<char> = data.chars().collect();
     let ix_to_char: HashMap<ix, char> = chars.clone().into_iter().enumerate().collect();
     let char_to_ix: HashMap<char, ix> = chars
