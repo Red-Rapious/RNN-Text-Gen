@@ -10,7 +10,7 @@ pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
 pub const LEARNING_RATE: f64 = 1e-1;
 pub const CLAMP: f64 = 5.0;
 pub const SAMPLE_SIZE: usize = 200;
-pub const SAMPLE_INTERVAL: usize = 200;
+pub const SAMPLE_INTERVAL: usize = 1000;
 
 #[allow(non_camel_case_types)]
 type ix = usize;
