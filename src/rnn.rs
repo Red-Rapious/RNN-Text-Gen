@@ -68,8 +68,7 @@ impl Model {
 
 pub fn start(path: &String) {
     /* File loading */
-    let data =
-        fs::read_to_string(path).unwrap_or_else(|_| panic!("Cannot find file {path}"));
+    let data = fs::read_to_string(path).unwrap_or_else(|_| panic!("Cannot find file {path}"));
     let chars: HashSet<char> = data.chars().collect();
     let ix_to_char: HashMap<ix, char> = chars.clone().into_iter().enumerate().collect();
     let char_to_ix: HashMap<char, ix> = chars
@@ -86,9 +85,24 @@ pub fn start(path: &String) {
     let normal = Normal::new(0.0, 1.0).unwrap();
     // Model parameters
     let mut model = Model::new(
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(HIDDEN_SIZE), nalgebra::Dyn(vocab_size), &normal, &mut rng),
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(HIDDEN_SIZE), nalgebra::Dyn(HIDDEN_SIZE), &normal, &mut rng),
-        0.01 * DMatrix::from_distribution_generic(nalgebra::Dyn(vocab_size), nalgebra::Dyn(HIDDEN_SIZE), &normal, &mut rng),
+        0.01 * DMatrix::from_distribution_generic(
+            nalgebra::Dyn(HIDDEN_SIZE),
+            nalgebra::Dyn(vocab_size),
+            &normal,
+            &mut rng,
+        ),
+        0.01 * DMatrix::from_distribution_generic(
+            nalgebra::Dyn(HIDDEN_SIZE),
+            nalgebra::Dyn(HIDDEN_SIZE),
+            &normal,
+            &mut rng,
+        ),
+        0.01 * DMatrix::from_distribution_generic(
+            nalgebra::Dyn(vocab_size),
+            nalgebra::Dyn(HIDDEN_SIZE),
+            &normal,
+            &mut rng,
+        ),
         DMatrix::zeros(HIDDEN_SIZE, 1),
         DMatrix::zeros(vocab_size, 1),
     );
