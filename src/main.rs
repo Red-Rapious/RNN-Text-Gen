@@ -10,6 +10,7 @@ pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
 pub const LEARNING_RATE: f64 = 1e-1;
 pub const CLAMP: f64 = 5.0;
 pub const SAMPLE_SIZE: usize = 200;
+pub const SAMPLE_INTERVAL: usize = 200;
 
 #[allow(non_camel_case_types)]
 type ix = usize;
@@ -104,7 +105,7 @@ fn main() {
 
     let mut n = 0;
     let mut p = 0;
-    let smooth_loss = (vocab_size as f64).ln() * SEQ_LENGTH as f64;
+    let mut smooth_loss = (vocab_size as f64).ln() * SEQ_LENGTH as f64;
     let mut prev_h = DMatrix::zeros(HIDDEN_SIZE, 1);
 
     loop {
@@ -125,7 +126,7 @@ fn main() {
             .collect();
 
         // sample from the model
-        if n % 100 == 0 {
+        if n % SAMPLE_INTERVAL == 0 {
             let sample = sample(&prev_h, inputs[0], SAMPLE_SIZE, vocab_size, &model);
             let txt: String = sample.iter().map(|i| ix_to_char[i]).collect();
             println!("----\n {} \n----", txt);
@@ -135,8 +136,8 @@ fn main() {
         let (loss, gradient, new_prev_h) =
             loss_function(inputs, targets, &prev_h, vocab_size, &model);
         prev_h = new_prev_h;
-        let smooth_loss = smooth_loss * 0.999 + loss * 0.001;
-        if n % 100 == 0 {
+        smooth_loss = smooth_loss * 0.999 + loss * 0.001;
+        if n % SAMPLE_INTERVAL == 0 {
             println!("iteration {}, loss: {}", n, smooth_loss);
         }
 
