@@ -51,7 +51,7 @@ impl GateModel {
         }
     }
 
-    fn new_memory(vocab_size: usize, hidden_size: usize) -> Self {
+    fn zeros(vocab_size: usize, hidden_size: usize) -> Self {
         Self {
             parameters: [
                 DMatrix::zeros(hidden_size, vocab_size),
@@ -90,12 +90,16 @@ impl GateModel {
 
 struct Model {
     pub parameters: [GateModel; 4],
+    pub wy: DMatrix<f64>,
+    pub by: DMatrix<f64>,
 }
 
 impl Model {
-    fn new(model_f: GateModel, model_i: GateModel, model_o: GateModel, model_g: GateModel) -> Self {
+    fn new(model_f: GateModel, model_i: GateModel, model_o: GateModel, model_g: GateModel, wy: DMatrix<f64>, by: DMatrix<f64>) -> Self {
         Self {
             parameters: [model_f, model_i, model_o, model_g],
+            wy,
+            by
         }
     }
 
@@ -109,17 +113,26 @@ impl Model {
                 GateModel::from_distribution(vocab_size, hidden_size, &normal, &mut rng),
                 GateModel::from_distribution(vocab_size, hidden_size, &normal, &mut rng),
             ],
+            wy: 0.01 * DMatrix::from_distribution_generic(
+                nalgebra::Dyn(vocab_size),
+                nalgebra::Dyn(hidden_size),
+                &normal,
+                &mut rng,
+            ),
+            by: DMatrix::zeros(vocab_size, 1)
         }
     }
 
-    fn new_memory(vocab_size: usize, hidden_size: usize) -> Self {
+    fn zeros(vocab_size: usize, hidden_size: usize) -> Self {
         Self {
             parameters: [
-                GateModel::new_memory(vocab_size, hidden_size),
-                GateModel::new_memory(vocab_size, hidden_size),
-                GateModel::new_memory(vocab_size, hidden_size),
-                GateModel::new_memory(vocab_size, hidden_size),
+                GateModel::zeros(vocab_size, hidden_size),
+                GateModel::zeros(vocab_size, hidden_size),
+                GateModel::zeros(vocab_size, hidden_size),
+                GateModel::zeros(vocab_size, hidden_size),
             ],
+            wy: DMatrix::zeros(vocab_size, hidden_size),
+            by: DMatrix::zeros(vocab_size, 1)
         }
     }
 
@@ -127,6 +140,8 @@ impl Model {
         for i in 0..4 {
             self.parameters[i].update_memory(&gradient.parameters[i]);
         }
+        self.wy += gradient.wy.map(|x| x * x);
+        self.by += gradient.by.map(|x| x * x);
     }
 
     fn update_parameters(&mut self, learning_rate: f64, gradient: &Model, memory: &Model) {
@@ -137,6 +152,8 @@ impl Model {
                 &memory.parameters[i],
             );
         }
+        self.wy -= learning_rate * gradient.wy.component_div(&memory.wy.map(|x| (x + 1e-8).sqrt()));
+        self.by -= learning_rate * gradient.by.component_div(&memory.by.map(|x| (x + 1e-8).sqrt()));
     }
 
     fn f(&self) -> &GateModel {
@@ -154,6 +171,10 @@ impl Model {
     fn g(&self) -> &GateModel {
         &self.parameters[3]
     }
+}
+
+fn sigmoid(f: f64) -> f64 {
+    1.0 / (1.0 + (-f).exp())
 }
 
 pub fn start(path: &String) {
@@ -175,7 +196,7 @@ pub fn start(path: &String) {
     let mut model = Model::new_random(vocab_size, HIDDEN_SIZE);
 
     // Memory variables for AdaGrad
-    let mut memory = Model::new_memory(vocab_size, HIDDEN_SIZE);
+    let mut memory = Model::zeros(vocab_size, HIDDEN_SIZE);
 
     let mut n = 0;
     let mut p = 0;
@@ -235,6 +256,53 @@ fn loss_function(
     vocab_size: usize,
     model: &Model,
 ) -> (f64, Model, DMatrix<f64>, DMatrix<f64>) {
+    // input vectors
+    let mut xs = Vec::with_capacity(inputs.len());
+    // hidden states
+    let mut hs = Vec::with_capacity(inputs.len());
+    // cell states
+    let mut cs = Vec::with_capacity(inputs.len());
+    // output vectors (probabilities before softmax)
+    let mut ys = Vec::with_capacity(inputs.len());
+    // char probabilities (softmax(y))
+    let mut ps = Vec::with_capacity(inputs.len());
+    // input gates
+    let mut is = Vec::with_capacity(inputs.len());
+    // forget gates
+    let mut fs = Vec::with_capacity(inputs.len());
+    // output gates
+    let mut os = Vec::with_capacity(inputs.len());
+    // cell input gates
+    let mut gs = Vec::with_capacity(inputs.len());
+
+   // note that `hs` and `cs` are shifted from one time step because `hs[0]` is the previous hidden state
+    hs.push(prev_h.clone());
+    cs.push(prev_c.clone());
+
+    let mut loss = 0.0;
+
+    // Forward pass
+    for t in 0..inputs.len() {
+        xs.push(DMatrix::zeros(vocab_size, 1));
+        xs[t][inputs[t]] = 1.0;
+
+        is.push((model.i().w().component_mul(&xs[t]) + model.i().u().component_mul(&hs[t]) + model.i().b()).map(sigmoid));
+        fs.push((model.f().w().component_mul(&xs[t]) + model.f().u().component_mul(&hs[t]) + model.f().b()).map(sigmoid));
+        os.push((model.o().w().component_mul(&xs[t]) + model.o().u().component_mul(&hs[t]) + model.o().b()).map(sigmoid));
+        gs.push((model.g().w().component_mul(&xs[t]) + model.g().u().component_mul(&hs[t]) + model.g().b()).map(f64::tanh));
+
+        cs.push(fs[t].component_mul(&cs[t]) + is[t].component_mul(&gs[t]));
+        hs.push(os[t].component_mul(&cs[t+1].map(f64::tanh)));
+
+        ys.push(&model.wy * &hs[t + 1] + &model.by);
+        ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
+
+        loss -= ps[t][targets[t]].ln(); // cross-entropy loss
+    }
+
+    // Backward pass
+    let mut gradient = Model::zeros(vocab_size, HIDDEN_SIZE);
+
     unimplemented!()
 }
 
