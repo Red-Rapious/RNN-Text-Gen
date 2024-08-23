@@ -239,13 +239,14 @@ fn sample(
     let mut generated_ixes: Vec<ix> = Vec::with_capacity(n);
 
     let mut rng = rand::thread_rng();
+    let mut h = h.clone();
 
     for _ in 0..n {
         // feedforward pass
-        let h = (model.wxh() * x + model.whh() * h + model.bh()).map(f64::tanh);
+        h = (model.wxh() * x + model.whh() * h + model.bh()).map(f64::tanh);
 
         // output
-        let y = model.why() * h + model.by();
+        let y = model.why() * &h + model.by();
         // apply softmax to obtain probabilities
         let p = y.map(f64::exp) / y.map(f64::exp).sum();
 
