@@ -95,11 +95,18 @@ struct Model {
 }
 
 impl Model {
-    fn new(model_f: GateModel, model_i: GateModel, model_o: GateModel, model_g: GateModel, wy: DMatrix<f64>, by: DMatrix<f64>) -> Self {
+    fn new(
+        model_f: GateModel,
+        model_i: GateModel,
+        model_o: GateModel,
+        model_g: GateModel,
+        wy: DMatrix<f64>,
+        by: DMatrix<f64>,
+    ) -> Self {
         Self {
             parameters: [model_f, model_i, model_o, model_g],
             wy,
-            by
+            by,
         }
     }
 
@@ -113,13 +120,14 @@ impl Model {
                 GateModel::from_distribution(vocab_size, hidden_size, &normal, &mut rng),
                 GateModel::from_distribution(vocab_size, hidden_size, &normal, &mut rng),
             ],
-            wy: 0.01 * DMatrix::from_distribution_generic(
-                nalgebra::Dyn(vocab_size),
-                nalgebra::Dyn(hidden_size),
-                &normal,
-                &mut rng,
-            ),
-            by: DMatrix::zeros(vocab_size, 1)
+            wy: 0.01
+                * DMatrix::from_distribution_generic(
+                    nalgebra::Dyn(vocab_size),
+                    nalgebra::Dyn(hidden_size),
+                    &normal,
+                    &mut rng,
+                ),
+            by: DMatrix::zeros(vocab_size, 1),
         }
     }
 
@@ -132,7 +140,7 @@ impl Model {
                 GateModel::zeros(vocab_size, hidden_size),
             ],
             wy: DMatrix::zeros(vocab_size, hidden_size),
-            by: DMatrix::zeros(vocab_size, 1)
+            by: DMatrix::zeros(vocab_size, 1),
         }
     }
 
@@ -152,8 +160,14 @@ impl Model {
                 &memory.parameters[i],
             );
         }
-        self.wy -= learning_rate * gradient.wy.component_div(&memory.wy.map(|x| (x + 1e-8).sqrt()));
-        self.by -= learning_rate * gradient.by.component_div(&memory.by.map(|x| (x + 1e-8).sqrt()));
+        self.wy -= learning_rate
+            * gradient
+                .wy
+                .component_div(&memory.wy.map(|x| (x + 1e-8).sqrt()));
+        self.by -= learning_rate
+            * gradient
+                .by
+                .component_div(&memory.by.map(|x| (x + 1e-8).sqrt()));
     }
 
     fn f(&self) -> &GateModel {
@@ -275,7 +289,7 @@ fn loss_function(
     // cell input gates
     let mut gs = Vec::with_capacity(inputs.len());
 
-   // note that `hs` and `cs` are shifted from one time step because `hs[0]` is the previous hidden state
+    // note that `hs` and `cs` are shifted from one time step because `hs[0]` is the previous hidden state
     hs.push(prev_h.clone());
     cs.push(prev_c.clone());
 
@@ -286,13 +300,33 @@ fn loss_function(
         xs.push(DMatrix::zeros(vocab_size, 1));
         xs[t][inputs[t]] = 1.0;
 
-        is.push((model.i().w().component_mul(&xs[t]) + model.i().u().component_mul(&hs[t]) + model.i().b()).map(sigmoid));
-        fs.push((model.f().w().component_mul(&xs[t]) + model.f().u().component_mul(&hs[t]) + model.f().b()).map(sigmoid));
-        os.push((model.o().w().component_mul(&xs[t]) + model.o().u().component_mul(&hs[t]) + model.o().b()).map(sigmoid));
-        gs.push((model.g().w().component_mul(&xs[t]) + model.g().u().component_mul(&hs[t]) + model.g().b()).map(f64::tanh));
+        is.push(
+            (model.i().w().component_mul(&xs[t])
+                + model.i().u().component_mul(&hs[t])
+                + model.i().b())
+            .map(sigmoid),
+        );
+        fs.push(
+            (model.f().w().component_mul(&xs[t])
+                + model.f().u().component_mul(&hs[t])
+                + model.f().b())
+            .map(sigmoid),
+        );
+        os.push(
+            (model.o().w().component_mul(&xs[t])
+                + model.o().u().component_mul(&hs[t])
+                + model.o().b())
+            .map(sigmoid),
+        );
+        gs.push(
+            (model.g().w().component_mul(&xs[t])
+                + model.g().u().component_mul(&hs[t])
+                + model.g().b())
+            .map(f64::tanh),
+        );
 
         cs.push(fs[t].component_mul(&cs[t]) + is[t].component_mul(&gs[t]));
-        hs.push(os[t].component_mul(&cs[t+1].map(f64::tanh)));
+        hs.push(os[t].component_mul(&cs[t + 1].map(f64::tanh)));
 
         ys.push(&model.wy * &hs[t + 1] + &model.by);
         ps.push(ys[t].map(f64::exp) / ys[t].map(f64::exp).sum()); // probabilities for next chars (softmax of ys)
@@ -314,5 +348,45 @@ fn sample(
     vocab_size: usize,
     model: &Model,
 ) -> Vec<ix> {
-    unimplemented!()
+    // input vector
+    let mut x = DMatrix::zeros(vocab_size, 1);
+    x[seed_letter] = 1.0;
+    // generated letters
+    let mut generated_ixes: Vec<ix> = Vec::with_capacity(n);
+
+    let mut rng = rand::thread_rng();
+
+    let mut h = h.clone();
+    let mut c = c.clone();
+
+    for _ in 0..n {
+        // feedforward pass
+        let i = (model.i().w().component_mul(&x) + model.i().u().component_mul(&h) + model.i().b())
+            .map(sigmoid);
+        let f = (model.f().w().component_mul(&x) + model.f().u().component_mul(&h) + model.f().b())
+            .map(sigmoid);
+        let o = (model.o().w().component_mul(&x) + model.o().u().component_mul(&h) + model.o().b())
+            .map(sigmoid);
+        let g = (model.g().w().component_mul(&x) + model.g().u().component_mul(&h) + model.g().b())
+            .map(sigmoid);
+
+        c = f.component_mul(&c) + i.component_mul(&g);
+        h = o.component_mul(&c.map(f64::tanh));
+
+        // output
+        let y = &model.wy * &h + &model.by;
+        // apply softmax to obtain probabilities
+        let p = y.map(f64::exp) / y.map(f64::exp).sum();
+
+        // randomly sample the next character using the distribution p
+        let ixes: Vec<ix> = (0..vocab_size).collect();
+        let ix = *ixes.choose_weighted(&mut rng, |i| p[*i]).unwrap();
+        generated_ixes.push(ix);
+
+        // update the next input
+        x = DMatrix::zeros(vocab_size, 1);
+        x[ix] = 1.0;
+    }
+
+    generated_ixes
 }
