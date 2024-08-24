@@ -10,7 +10,7 @@ pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
 pub const LEARNING_RATE: f64 = 1e-1;
 pub const CLAMP: f64 = 5.0;
 pub const SAMPLE_SIZE: usize = 200;
-pub const SAMPLE_INTERVAL: usize = 1000;
+pub const SAMPLE_INTERVAL: usize = 200;
 
 #[allow(non_camel_case_types)]
 type ix = usize;
@@ -20,12 +20,6 @@ struct GateModel {
 }
 
 impl GateModel {
-    fn new(w: DMatrix<f64>, u: DMatrix<f64>, b: DMatrix<f64>) -> Self {
-        Self {
-            parameters: [w, u, b],
-        }
-    }
-
     fn from_distribution(
         vocab_size: usize,
         hidden_size: usize,
@@ -98,6 +92,12 @@ impl GateModel {
                     .component_mul(&memory.parameters[i].map(|x| 1.0 / f64::sqrt(x + 1e-8)));
         }
     }
+
+    fn clip(&mut self) {
+        for i in 0..3 {
+            self.parameters[i] = self.parameters[i].map(|x| x.clamp(-CLAMP, CLAMP))
+        }
+    }
 }
 
 struct Model {
@@ -107,21 +107,6 @@ struct Model {
 }
 
 impl Model {
-    fn new(
-        model_f: GateModel,
-        model_i: GateModel,
-        model_o: GateModel,
-        model_g: GateModel,
-        wy: DMatrix<f64>,
-        by: DMatrix<f64>,
-    ) -> Self {
-        Self {
-            parameters: [model_f, model_i, model_o, model_g],
-            wy,
-            by,
-        }
-    }
-
     fn new_random(vocab_size: usize, hidden_size: usize) -> Self {
         let mut rng = rand::thread_rng();
         let normal = Normal::new(0.0, 1.0).unwrap();
@@ -212,6 +197,14 @@ impl Model {
 
     fn g_mut(&mut self) -> &mut GateModel {
         &mut self.parameters[3]
+    }
+
+    fn clip(&mut self) {
+        for i in 0..4 {
+            self.parameters[i].clip()
+        }
+        self.wy = self.wy.map(|x| x.clamp(-CLAMP, CLAMP));
+        self.by = self.by.map(|x| x.clamp(-CLAMP, CLAMP));
     }
 }
 
@@ -328,30 +321,10 @@ fn loss_function(
         xs.push(DMatrix::zeros(vocab_size, 1));
         xs[t][inputs[t]] = 1.0;
 
-        is.push(
-            (model.i().w().component_mul(&xs[t])
-                + model.i().u().component_mul(&hs[t])
-                + model.i().b())
-            .map(sigmoid),
-        );
-        fs.push(
-            (model.f().w().component_mul(&xs[t])
-                + model.f().u().component_mul(&hs[t])
-                + model.f().b())
-            .map(sigmoid),
-        );
-        os.push(
-            (model.o().w().component_mul(&xs[t])
-                + model.o().u().component_mul(&hs[t])
-                + model.o().b())
-            .map(sigmoid),
-        );
-        gs.push(
-            (model.g().w().component_mul(&xs[t])
-                + model.g().u().component_mul(&hs[t])
-                + model.g().b())
-            .map(f64::tanh),
-        );
+        is.push((model.i().w() * &xs[t] + model.i().u() * &hs[t] + model.i().b()).map(sigmoid));
+        fs.push((model.f().w() * &xs[t] + model.f().u() * &hs[t] + model.f().b()).map(sigmoid));
+        os.push((model.o().w() * &xs[t] + model.o().u() * &hs[t] + model.o().b()).map(sigmoid));
+        gs.push((model.g().w() * &xs[t] + model.g().u() * &hs[t] + model.g().b()).map(f64::tanh));
 
         cs.push(fs[t].component_mul(&cs[t]) + is[t].component_mul(&gs[t]));
         hs.push(os[t].component_mul(&cs[t + 1].map(f64::tanh)));
@@ -417,6 +390,8 @@ fn loss_function(
         dnext_c = fs[t].component_mul(&dc);
     }
 
+    grad.clip();
+
     (
         loss,
         grad,
@@ -446,14 +421,10 @@ fn sample(
 
     for _ in 0..n {
         // feedforward pass
-        let i = (model.i().w().component_mul(&x) + model.i().u().component_mul(&h) + model.i().b())
-            .map(sigmoid);
-        let f = (model.f().w().component_mul(&x) + model.f().u().component_mul(&h) + model.f().b())
-            .map(sigmoid);
-        let o = (model.o().w().component_mul(&x) + model.o().u().component_mul(&h) + model.o().b())
-            .map(sigmoid);
-        let g = (model.g().w().component_mul(&x) + model.g().u().component_mul(&h) + model.g().b())
-            .map(sigmoid);
+        let i = (model.i().w() * &x + model.i().u() * &h + model.i().b()).map(sigmoid);
+        let f = (model.f().w() * &x + model.f().u() * &h + model.f().b()).map(sigmoid);
+        let o = (model.o().w() * &x + model.o().u() * &h + model.o().b()).map(sigmoid);
+        let g = (model.g().w() * &x + model.g().u() * &h + model.g().b()).map(sigmoid);
 
         c = f.component_mul(&c) + i.component_mul(&g);
         h = o.component_mul(&c.map(f64::tanh));
