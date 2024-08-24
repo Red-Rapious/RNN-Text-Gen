@@ -10,7 +10,7 @@ pub const SEQ_LENGTH: usize = 25; // truncation of backpropagation through time
 pub const LEARNING_RATE: f64 = 1e-1;
 pub const CLAMP: f64 = 5.0;
 pub const SAMPLE_SIZE: usize = 200;
-pub const SAMPLE_INTERVAL: usize = 200;
+pub const SAMPLE_INTERVAL: usize = 1000;
 
 #[allow(non_camel_case_types)]
 type ix = usize;
@@ -424,7 +424,7 @@ fn sample(
         let i = (model.i().w() * &x + model.i().u() * &h + model.i().b()).map(sigmoid);
         let f = (model.f().w() * &x + model.f().u() * &h + model.f().b()).map(sigmoid);
         let o = (model.o().w() * &x + model.o().u() * &h + model.o().b()).map(sigmoid);
-        let g = (model.g().w() * &x + model.g().u() * &h + model.g().b()).map(sigmoid);
+        let g = (model.g().w() * &x + model.g().u() * &h + model.g().b()).map(f64::tanh);
 
         c = f.component_mul(&c) + i.component_mul(&g);
         h = o.component_mul(&c.map(f64::tanh));
