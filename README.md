@@ -15,44 +15,38 @@ Hyperparameters are defined in [`src/rnn.rs`](src/rnn.rs); you can for instance 
 ## Theory
 ### Vanilla RNN
 The simple RNN uses the following recurring equations:
-$$
-\begin{aligned}
+$$\begin{aligned}
 h_t &= \tanh\left(W_{hh}h_{t-1}+W_{xh}x_t + b_h\right)\\
 y_t &= W_{hy}h_t+b_y
-\end{aligned}
-$$
+\end{aligned}$$
 
 ### LSTM
 The Long Short-Term Memory architecture uses the following recurring equations:
-$$
-    \begin{aligned}
-        \begin{bmatrix}
-            i\\
-            f\\
-            o\\
-            g
-        \end{bmatrix}
-        &= \begin{bmatrix}
-            \sigma\\
-            \sigma\\
-            \sigma\\
-            \tanh
-        \end{bmatrix} W \begin{bmatrix}
-            h_{t-1}\\
-            x_t
-        \end{bmatrix} \\
-        c_t &= f \odot c_{t-1} + i\odot g\\
-        h_t &= o \odot \tanh(c_t)
-    \end{aligned}
-$$
+$$\begin{aligned}
+    \begin{bmatrix}
+        i\\
+        f\\
+        o\\
+        g
+    \end{bmatrix}
+    &= \begin{bmatrix}
+        \sigma\\
+        \sigma\\
+        \sigma\\
+        \tanh
+    \end{bmatrix} W \begin{bmatrix}
+        h_{t-1}\\
+        x_t
+    \end{bmatrix} \\
+    c_t &= f \odot c_{t-1} + i\odot g\\
+    h_t &= o \odot \tanh(c_t)
+\end{aligned}$$
 where $\odot$ denotes the Hadamard (component-wise) product, `.component_mul` in the Rust code.
 
 ### Optimization (AdaGrad)
 The optimization is done with AdaGrad. For each parameter $\theta_{t,i}$:
-$$
-\begin{aligned}
+$$\begin{aligned}
         m_{t+1,i} &= m_{t,i} + \nabla\mathcal{L}(\theta_t)_i^2\\
         \theta_{t+1,i} &= \theta_{t,i} - \frac{\eta}{\sqrt{m_{t+1,i}+\varepsilon}}\cdot\nabla\mathcal{L}(\theta_t)_i
-\end{aligned}
-$$
+\end{aligned}$$
 where $\varepsilon=10^{-8}$ and $\eta$ is the learning rate, $0.1$ in the code.
