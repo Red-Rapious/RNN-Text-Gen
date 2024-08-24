@@ -56,3 +56,21 @@ The optimization is done with AdaGrad. For each parameter $\theta_{t,i}$:
 \end{align*}
 ```
 where $\varepsilon=10^{-8}$ and $\eta$ is the learning rate, $0.1$ in the code.
+
+## Result sample
+After ... iterations of LSTM for sequences of length 25, I obtained this following result sample on the [`shakespeare-40k.txt`](data/shakespeare-40k.txt) dataset:
+```
+QUEEN ELIZABETH:
+The fraine thy most a twagenest.
+Dle staffold!
+To you doubs,
+And weal drief.
+
+PRESBERHA:
+I ungo to cursess witor'd; us lave whil, than enough.
+
+KING RICHARD III:
+That lighterde for thy dascore defol,
+And with leavend my sagn of the good burtief.
+Thou wor he art I. Prince, but bournon they have my lord.
+```
