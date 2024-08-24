@@ -73,6 +73,18 @@ impl GateModel {
         &self.parameters[2]
     }
 
+    fn w_mut(&mut self) -> &mut DMatrix<f64> {
+        &mut self.parameters[0]
+    }
+
+    fn u_mut(&mut self) -> &mut DMatrix<f64> {
+        &mut self.parameters[1]
+    }
+
+    fn b_mut(&mut self) -> &mut DMatrix<f64> {
+        &mut self.parameters[2]
+    }
+
     fn update_memory(&mut self, gradient: &GateModel) {
         for i in 0..3 {
             self.parameters[i] += gradient.parameters[i].map(|x| x * x);
@@ -184,6 +196,22 @@ impl Model {
 
     fn g(&self) -> &GateModel {
         &self.parameters[3]
+    }
+
+    fn f_mut(&mut self) -> &mut GateModel {
+        &mut self.parameters[0]
+    }
+
+    fn i_mut(&mut self) -> &mut GateModel {
+        &mut self.parameters[1]
+    }
+
+    fn o_mut(&mut self) -> &mut GateModel {
+        &mut self.parameters[2]
+    }
+
+    fn g_mut(&mut self) -> &mut GateModel {
+        &mut self.parameters[3]
     }
 }
 
@@ -335,9 +363,66 @@ fn loss_function(
     }
 
     // Backward pass
-    let mut gradient = Model::zeros(vocab_size, HIDDEN_SIZE);
+    let mut grad = Model::zeros(vocab_size, HIDDEN_SIZE);
+    let mut dnext_h = DMatrix::zeros(hs[0].nrows(), hs[0].ncols());
+    let mut dnext_c = DMatrix::zeros(hs[0].nrows(), hs[0].ncols());
 
-    unimplemented!()
+    for t in (0..inputs.len()).rev() {
+        // probabilities
+        let mut dy = ps[t].clone();
+        dy[targets[t]] -= 1.0;
+
+        grad.wy += &dy * hs[t + 1].transpose();
+        grad.by += &dy;
+
+        let dh = model.wy.transpose() * dy + &dnext_h;
+
+        // output gate
+        let do_ = dh.component_mul(&cs[t + 1].map(f64::tanh));
+        let do_raw = do_.component_mul(&os[t].map(|x| x * (1.0 - x)));
+        *grad.o_mut().w_mut() += &do_raw * xs[t].transpose();
+        *grad.o_mut().u_mut() += &do_raw * hs[t].transpose();
+        *grad.o_mut().b_mut() += &do_raw;
+
+        let dc = dh
+            .component_mul(&os[t])
+            .component_mul(&cs[t + 1].map(|x| 1.0 - x.tanh() * x.tanh()))
+            + &dnext_c;
+
+        // cell input gate
+        let dg = dc.component_mul(&is[t]);
+        let dc_raw = dg.component_mul(&gs[t].map(|x| 1.0 - x * x));
+        *grad.g_mut().w_mut() += &dc_raw * xs[t].transpose();
+        *grad.g_mut().u_mut() += &dc_raw * hs[t].transpose();
+        *grad.g_mut().b_mut() += &dc_raw;
+
+        // input gate
+        let di = dc.component_mul(&gs[t]);
+        let di_raw = di.component_mul(&is[t].map(|x| x * (1.0 - x)));
+        *grad.i_mut().w_mut() += &di_raw * xs[t].transpose();
+        *grad.i_mut().u_mut() += &di_raw * hs[t].transpose();
+        *grad.i_mut().b_mut() += &di_raw;
+
+        // forget gate
+        let df = dc.component_mul(&cs[t]);
+        let df_raw = df.component_mul(&fs[t].map(|x| x * (1.0 - x)));
+        *grad.f_mut().w_mut() += &df_raw * xs[t].transpose();
+        *grad.f_mut().u_mut() += &df_raw * hs[t].transpose();
+        *grad.f_mut().b_mut() += &df_raw;
+
+        dnext_h = model.f().u().transpose() * &df_raw
+            + model.i().u().transpose() * &df_raw
+            + model.o().u().transpose() * &df_raw
+            + model.g().u().transpose() * &df_raw;
+        dnext_c = fs[t].component_mul(&dc);
+    }
+
+    (
+        loss,
+        grad,
+        hs[inputs.len()].clone(),
+        cs[inputs.len()].clone(),
+    )
 }
 
 fn sample(
